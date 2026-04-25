@@ -1,21 +1,11 @@
 {
-  "name": "orbit-smp-bot",
+  "name": "disbit",
   "version": "1.0.0",
-  "description": "Orbit SMP — Official AI Discord Bot",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.15.3",
-    "@anthropic-ai/sdk": "^0.39.0",
-    "dotenv": "^16.4.5"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.0"
+    "discord.js": "^14.15.3"
   }
 }
