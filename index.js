@@ -5,10 +5,7 @@ const {
   Routes,
   SlashCommandBuilder,
   PermissionFlagsBits,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle
+  EmbedBuilder
 } = require('discord.js');
 
 const TOKEN = process.env.TOKEN;
@@ -22,15 +19,10 @@ const client = new Client({
   ]
 });
 
-/**
- * UPDATED: Professional Event Types
- */
-const EVENT_TYPES = ['meeting', 'workshop', 'social', 'presentation', 'other'];
+// Production-focused Event Types
+const EVENT_TYPES = ['recording', 'lore_meeting', 'set_building', 'rehearsal'];
 
-// In-memory storage
 const activeEvents = {};
-const activePolls = {};
-const activeGiveaways = {};
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -38,93 +30,72 @@ function parseMultiline(str) {
   return str.replace(/\\n/g, '\n');
 }
 
-function parseColor(hex) {
-  if (!hex) return 0x5865F2;
-  const clean = hex.replace('#', '');
-  const num = parseInt(clean, 16);
-  return isNaN(num) ? 0x5865F2 : num;
-}
-
 // ─── Embed Builders ────────────────────────────────────────────────────────────
 
-function buildEventEmbed(eventType, status, time, host, notes) {
-  const icons = { meeting: '📅', workshop: '🛠️', social: '🤝', presentation: '📊', other: '✨' };
-  const icon = icons[eventType.toLowerCase()] || '🗓️';
-  const registrationStatus = status.toLowerCase() === 'open' ? '🟢 Accepting Entries' : '🔴 Capacity Reached';
+function buildProductionEmbed(type, time, host, loreNotes) {
+  const icons = { 
+    recording: '🎥', 
+    lore_meeting: '📜', 
+    set_building: '🏗️', 
+    rehearsal: '🎭' 
+  };
+  
+  const titles = {
+    recording: 'Recording Session',
+    lore_meeting: 'Lore & Script Briefing',
+    set_building: 'Set Construction',
+    rehearsal: 'Scene Rehearsal'
+  };
 
   const embed = new EmbedBuilder()
-    .setTitle(`${icon} New Event: ${eventType.toUpperCase()}`)
-    .setColor(status.toLowerCase() === 'open' ? 0x57F287 : 0xED4245)
+    .setTitle(`${icons[type] || '🎬'} Production Event: ${titles[type] || type}`)
+    .setColor(0x5865F2)
     .addFields(
-      { name: 'Category', value: eventType.charAt(0).toUpperCase() + eventType.slice(1), inline: true },
-      { name: 'Status', value: registrationStatus, inline: true },
-      { name: 'Scheduled Time', value: time, inline: true },
-      { name: 'Organizer', value: `<@${host.id}>`, inline: true }
+      { name: '📅 Scheduled Time', value: time, inline: true },
+      { name: '🎬 Director/Host', value: `<@${host.id}>`, inline: true },
+      { name: '📋 Status', value: '🟢 Required Personnel Only', inline: true }
     )
-    .setFooter({ text: 'Corporate Event Management System' })
+    .setFooter({ text: 'Orbit SMP Production Management' })
     .setTimestamp();
 
-  if (notes) embed.addFields({ name: 'Details', value: notes });
+  if (loreNotes) {
+    embed.addFields({ name: '📝 Script/Lore Notes', value: loreNotes });
+  }
 
   return { embeds: [embed] };
 }
 
-// ─── Command Definitions ───────────────────────────────────────────────────────
+// ─── Slash Command Definitions ─────────────────────────────────────────────────
 
 const commands = [
-  // ── /hostevent (Modified for general organization) ──────────────────────────
   new SlashCommandBuilder()
-    .setName('hostevent')
-    .setDescription('Create a new scheduled event')
+    .setName('schedule')
+    .setDescription('Schedule a production event for the SMP')
     .addStringOption(o =>
-      o.setName('type').setDescription('Category of the event').setRequired(true)
+      o.setName('type').setDescription('What kind of session?').setRequired(true)
         .addChoices(
-          { name: '📅 Meeting', value: 'meeting' },
-          { name: '🛠️ Workshop', value: 'workshop' },
-          { name: '🤝 Social', value: 'social' },
-          { name: '📊 Presentation', value: 'presentation' },
-          { name: '✨ Other', value: 'other' }
+          { name: '🎥 Recording Session', value: 'recording' },
+          { name: '📜 Lore Meeting', value: 'lore_meeting' },
+          { name: '🏗️ Set Building', value: 'set_building' },
+          { name: '🎭 Scene Rehearsal', value: 'rehearsal' }
         )
     )
-    .addStringOption(o =>
-      o.setName('registration').setDescription('Is registration open?').setRequired(true)
-        .addChoices(
-          { name: '🟢 Open', value: 'open' },
-          { name: '🔴 Closed', value: 'closed' }
-        )
-    )
-    .addStringOption(o => o.setName('time').setDescription('Date and Time (e.g., Oct 12, 3:00 PM)').setRequired(true))
-    .addStringOption(o => o.setName('details').setDescription('Additional event description').setRequired(false))
+    .addStringOption(o => o.setName('time').setDescription('When? (e.g. Saturday 4PM EST)').setRequired(true))
+    .addStringOption(o => o.setName('notes').setDescription('Script notes or scene objectives').setRequired(false))
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageEvents),
 
-  // ── /eventinfo ───────────────────────────────────────────────────────────────
   new SlashCommandBuilder()
-    .setName('eventinfo')
-    .setDescription('Display details of the current active event'),
+    .setName('callsheet')
+    .setDescription('View who is signed up for the current session'),
 
-  // ── /register ────────────────────────────────────────────────────────────────
   new SlashCommandBuilder()
-    .setName('register')
-    .setDescription('Register your attendance for the current event'),
+    .setName('signon')
+    .setDescription('Confirm your attendance for the scheduled production'),
 
-  // ── /cancel_registration ─────────────────────────────────────────────────────
   new SlashCommandBuilder()
-    .setName('cancel_registration')
-    .setDescription('Remove your name from the event attendee list'),
-
-  // ── /attendees ───────────────────────────────────────────────────────────────
-  new SlashCommandBuilder()
-    .setName('attendees')
-    .setDescription('View the list of registered attendees'),
-
-  // ── /announce ────────────────────────────────────────────────────────────────
-  new SlashCommandBuilder()
-    .setName('announce')
-    .setDescription('Send a professional announcement')
-    .addChannelOption(o => o.setName('channel').setDescription('Target channel').setRequired(true))
-    .addStringOption(o => o.setName('text').setDescription('Message body. Use \\n for new lines.').setRequired(true))
-    .addStringOption(o => o.setName('title').setDescription('Optional header').setRequired(false))
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
+    .setName('endproduction')
+    .setDescription('Clear the current production event')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageEvents),
 
 ].map(cmd => cmd.toJSON());
 
@@ -133,84 +104,63 @@ const commands = [
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  const { commandName, guildId, options, user } = interaction;
+  const guildId = interaction.guildId;
   const event = activeEvents[guildId];
 
-  // --- Host Event ---
-  if (commandName === 'hostevent') {
-    const type = options.getString('type');
-    const registration = options.getString('registration');
-    const time = options.getString('time');
-    const details = options.getString('details') ?? '';
+  if (interaction.commandName === 'schedule') {
+    const type = interaction.options.getString('type');
+    const time = interaction.options.getString('time');
+    const notes = parseMultiline(interaction.options.getString('notes') || '');
 
     activeEvents[guildId] = { 
       type, 
-      registration, 
       time, 
-      host: user, 
+      host: interaction.user, 
       attendees: [], 
-      details 
+      notes 
     };
 
-    return interaction.reply(buildEventEmbed(type, registration, time, user, details));
+    return interaction.reply(buildProductionEmbed(type, time, interaction.user, notes));
   }
 
-  // --- Register ---
-  if (commandName === 'register') {
-    if (!event) return interaction.reply({ content: '❌ No active event found.', ephemeral: true });
-    if (event.registration !== 'open') return interaction.reply({ content: '❌ Registration is currently closed.', ephemeral: true });
+  if (interaction.commandName === 'signon') {
+    if (!event) return interaction.reply({ content: '❌ No active production scheduled.', ephemeral: true });
     
-    if (event.attendees.some(u => u.id === user.id)) {
-      return interaction.reply({ content: 'ℹ️ You are already registered.', ephemeral: true });
+    if (event.attendees.some(u => u.id === interaction.user.id)) {
+      return interaction.reply({ content: 'You are already on the call sheet.', ephemeral: true });
     }
 
-    event.attendees.push({ id: user.id, tag: user.tag });
+    event.attendees.push({ id: interaction.user.id, tag: interaction.user.tag });
     return interaction.reply({ 
-      content: `✅ <@${user.id}>, your registration for the **${event.type}** has been confirmed.`, 
-      ephemeral: true 
+      content: `✅ <@${interaction.user.id}> is confirmed for the **${event.type}** session.`, 
+      ephemeral: false 
     });
   }
 
-  // --- Attendees ---
-  if (commandName === 'attendees') {
-    if (!event) return interaction.reply({ content: '❌ No active event.', ephemeral: true });
-    
+  if (interaction.commandName === 'callsheet') {
+    if (!event) return interaction.reply({ content: '❌ No active production scheduled.', ephemeral: true });
+
     const list = event.attendees.length > 0 
-      ? event.attendees.map((u, i) => `${i + 1}. <@${u.id}>`).join('\n')
-      : 'No attendees registered yet.';
+      ? event.attendees.map((u, i) => `\`${i + 1}.\` <@${u.id}>`).join('\n')
+      : '_No cast/crew signed on yet._';
 
     const embed = new EmbedBuilder()
-      .setTitle(`Attendee List: ${event.type.toUpperCase()}`)
-      .setDescription(list)
-      .setColor(0x5865F2);
+      .setTitle(`Call Sheet: ${event.type.replace('_', ' ').toUpperCase()}`)
+      .setDescription(`**Time:** ${event.time}\n\n**Personnel:**\n${list}`)
+      .setColor(0xFEE75C)
+      .setFooter({ text: 'Orbit SMP Production' });
 
     return interaction.reply({ embeds: [embed] });
   }
 
-  // --- Professional Announcement ---
-  if (commandName === 'announce') {
-    const channel = options.getChannel('channel');
-    const text = parseMultiline(options.getString('text'));
-    const title = options.getString('title') ?? 'Internal Announcement';
-
-    const embed = new EmbedBuilder()
-      .setTitle(title)
-      .setDescription(text)
-      .setColor(0x5865F2)
-      .setFooter({ text: `Issued by ${user.tag}` })
-      .setTimestamp();
-
-    try {
-      await channel.send({ embeds: [embed] });
-      await interaction.reply({ content: '✅ Announcement dispatched.', ephemeral: true });
-    } catch (err) {
-      await interaction.reply({ content: '❌ Failed to send. Check channel permissions.', ephemeral: true });
-    }
+  if (interaction.commandName === 'endproduction') {
+    delete activeEvents[guildId];
+    return interaction.reply('🎬 Production event cleared.');
   }
 });
 
 client.once('ready', async () => {
-  console.log(`🚀 Event Manager ready: ${client.user.tag}`);
+  console.log(`✅ Orbit Production Bot online: ${client.user.tag}`);
   const rest = new REST({ version: '10' }).setToken(TOKEN);
   try {
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
